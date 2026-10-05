@@ -183,13 +183,42 @@ class Board
     }
 };
 
+class ScoreBoard
+{
+    int current_ = 0;
+    int high_ = 0;
+
+  public:
+    int current() const
+    {
+        return current_;
+    }
+    int high() const
+    {
+        return high_;
+    }
+    void load(int highScore)
+    {
+        high_ = std::max(0, highScore);
+    }
+    void reset()
+    {
+        current_ = 0;
+    }
+    void addLines(int lines)
+    {
+        current_ += lines * 10;
+        high_ = std::max(high_, current_);
+    }
+};
+
 struct GameState
 {
-    int score = 0, highScore = 0;
     Piece current{Shape::T, Rotation::R0}, next{Shape::T, Rotation::R0};
+    ScoreBoard score;
     void reset(Piece a, Piece b)
     {
-        score = 0;
+        score.reset();
         current = a;
         next = b;
     }
@@ -265,14 +294,17 @@ void DrawBoard()
 }
 Piece RandomPiece()
 {
-    return {(Shape)(rng() % 7), (Rotation)(rng() % 4)};
+    return {static_cast<Shape>(rng() % kShapeCount), static_cast<Rotation>(rng() % kRotationCount)};
 }
 void ReadGrade()
 {
     std::ifstream in(kScoreFile);
-    if (!(in >> game.highScore))
+    int highScore = 0;
+    if (in >> highScore)
+        game.score.load(highScore);
+    else
     {
-        game.highScore = 0;
+        game.score.load(0);
         std::ofstream(kScoreFile) << 0;
     }
 }
@@ -280,7 +312,7 @@ void WriteGrade()
 {
     std::ofstream out(kScoreFile);
     if (out)
-        out << game.highScore;
+        out << game.score.high();
 }
 void InitInterface()
 {
@@ -304,9 +336,9 @@ void InitInterface()
     CursorJump(2 * kColumns + 4, kRows - 7);
     std::cout << "重新开始:R";
     CursorJump(2 * kColumns + 4, kRows - 5);
-    std::cout << "最高纪录:" << game.highScore;
+    std::cout << "最高纪录:" << game.score.high();
     CursorJump(2 * kColumns + 4, kRows - 3);
-    std::cout << "当前分数：" << game.score;
+    std::cout << "当前分数：" << game.score.current();
 }
 void StartGame()
 {
@@ -315,6 +347,7 @@ void StartGame()
     {
         Piece p = game.current, n = game.next;
         int x = kColumns / 2 - 2, y = 0, ticks = 10000;
+        bool restarted = false;
         ClearPreviewArea(kColumns + 3, 3);
         DrawPiece(n, kColumns + 3, 3);
         while (true)
@@ -328,7 +361,7 @@ void StartGame()
                 {
                     board.lock(pieces, p, x, y);
                     int lines = board.clearFullRows();
-                    game.score += lines * 10;
+                    game.score.addLines(lines);
                     if (lines)
                         InitInterface();
                     break;
@@ -367,18 +400,24 @@ void StartGame()
                 else if (key == 's' || key == 'S')
                     system("pause>nul");
                 else if (key == 27)
+                {
+                    WriteGrade();
                     return;
+                }
                 else if (key == 'r' || key == 'R')
                 {
                     board.reset();
+                    game.reset(RandomPiece(), RandomPiece());
                     InitInterface();
+                    restarted = true;
                     break;
                 }
             }
         }
+        if (restarted)
+            continue;
         if (board.topOccupied())
         {
-            game.highScore = std::max(game.highScore, game.score);
             WriteGrade();
             return;
         }
