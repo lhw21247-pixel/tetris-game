@@ -9,7 +9,7 @@
 namespace tetris
 {
 constexpr int kRows = 29, kColumns = 20, kPieceSize = 4, kShapeCount = 7, kRotationCount = 4;
-constexpr char kScoreFile[] = "俄罗斯方块最高得分记录.txt";
+constexpr char kScoreFile[] = "high_score.txt";
 using Grid = std::array<std::array<unsigned char, 4>, 4>;
 enum class Shape : unsigned char
 {

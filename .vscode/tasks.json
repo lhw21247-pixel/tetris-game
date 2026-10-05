@@ -9,7 +9,7 @@
                 "-std=c++17",
                 "-fdiagnostics-color=always",
                 "-g",
-                "${workspaceFolder}\\俄罗斯方块.cpp",
+                "${workspaceFolder}\\tetris.cpp",
                 "-o",
                 "tetris.exe"
             ],
