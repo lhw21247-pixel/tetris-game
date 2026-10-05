@@ -1,0 +1,26 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "运行俄罗斯方块",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}\\tetris.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": true,
+            "MIMode": "gdb",
+            "miDebuggerPath": "C:\\mingw64\\bin\\gdb.exe",
+            "preLaunchTask": "构建俄罗斯方块",
+            "setupCommands": [
+                {
+                    "description": "启用 GDB pretty-printing",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        }
+    ]
+}
