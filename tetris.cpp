@@ -200,6 +200,12 @@ Board board;
 PieceSet pieces;
 GameState game;
 std::mt19937 rng{std::random_device{}()};
+void ConfigureConsoleEncoding()
+{
+    // 源文件和界面文本使用 UTF-8；让 Windows 控制台用同一编码解释输出字节。
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+}
 void HideCursor()
 {
     CONSOLE_CURSOR_INFO i{1, FALSE};
@@ -372,6 +378,7 @@ void StartGame()
 }
 int main()
 {
+    ConfigureConsoleEncoding();
     system("title 俄罗斯方块");
     system("mode con lines=29 cols=60");
     HideCursor();
