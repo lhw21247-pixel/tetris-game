@@ -242,6 +242,16 @@ void ErasePiece(Piece p, int x, int y)
                 std::cout << "  ";
             }
 }
+void ClearPreviewArea(int x, int y)
+{
+    SetColor(7);
+    for (int r = 0; r < kPieceSize; ++r)
+        for (int c = 0; c < kPieceSize; ++c)
+        {
+            CursorJump(2 * (x + c), y + r);
+            std::cout << "  ";
+        }
+}
 void DrawBoard()
 {
     for (int r = 0; r < kRows; ++r)
@@ -305,7 +315,7 @@ void StartGame()
     {
         Piece p = game.current, n = game.next;
         int x = kColumns / 2 - 2, y = 0, ticks = 10000;
-        ErasePiece(n, kColumns + 3, 3);
+        ClearPreviewArea(kColumns + 3, 3);
         DrawPiece(n, kColumns + 3, 3);
         while (true)
         {
