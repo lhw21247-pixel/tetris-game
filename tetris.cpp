@@ -6,11 +6,13 @@
 #include <iostream>
 #include <random>
 
+using namespace std;
+
 namespace tetris
 {
 constexpr int kRows = 29, kColumns = 20, kPieceSize = 4, kShapeCount = 7, kRotationCount = 4;
 constexpr char kScoreFile[] = "high_score.txt";
-using Grid = std::array<std::array<unsigned char, 4>, 4>;
+using Grid = array<array<unsigned char, 4>, 4>;
 enum class Shape : unsigned char
 {
     T,
@@ -49,7 +51,7 @@ constexpr int index(Rotation r)
 
 class PieceSet
 {
-    std::array<std::array<Grid, 4>, 7> cells_{};
+    array<array<Grid, 4>, 7> cells_{};
     static Grid rotate(const Grid &source)
     {
         Grid result{};
@@ -112,7 +114,7 @@ class PieceSet
 
 class Board
 {
-    std::array<std::array<Cell, kColumns>, kRows> cells_{};
+    array<array<Cell, kColumns>, kRows> cells_{};
 
   public:
     Board()
@@ -159,7 +161,7 @@ class Board
         for (int r = kRows - 2; r > 0; --r)
         {
             bool full =
-                std::all_of(cells_[r].begin() + 1, cells_[r].end() - 1, [](const Cell &c) { return c.occupied; });
+                all_of(cells_[r].begin() + 1, cells_[r].end() - 1, [](const Cell &c) { return c.occupied; });
             if (!full)
                 continue;
             ++cleared;
@@ -199,7 +201,7 @@ class ScoreBoard
     }
     void load(int highScore)
     {
-        high_ = std::max(0, highScore);
+        high_ = max(0, highScore);
     }
     void reset()
     {
@@ -208,7 +210,7 @@ class ScoreBoard
     void addLines(int lines)
     {
         current_ += lines * 10;
-        high_ = std::max(high_, current_);
+        high_ = max(high_, current_);
     }
 };
 
@@ -228,7 +230,7 @@ using namespace tetris;
 Board board;
 PieceSet pieces;
 GameState game;
-std::mt19937 rng{std::random_device{}()};
+mt19937 rng{random_device{}()};
 void ConfigureConsoleEncoding()
 {
     // 源文件和界面文本使用 UTF-8；让 Windows 控制台用同一编码解释输出字节。
@@ -257,7 +259,7 @@ void DrawPiece(Piece p, int x, int y)
             if (g[r][c])
             {
                 CursorJump(2 * (x + c), y + r);
-                std::cout << "■";
+                cout << "■";
             }
 }
 void ErasePiece(Piece p, int x, int y)
@@ -268,7 +270,7 @@ void ErasePiece(Piece p, int x, int y)
             if (g[r][c])
             {
                 CursorJump(2 * (x + c), y + r);
-                std::cout << "  ";
+                cout << "  ";
             }
 }
 void ClearPreviewArea(int x, int y)
@@ -278,7 +280,7 @@ void ClearPreviewArea(int x, int y)
         for (int c = 0; c < kPieceSize; ++c)
         {
             CursorJump(2 * (x + c), y + r);
-            std::cout << "  ";
+            cout << "  ";
         }
 }
 void DrawBoard()
@@ -289,7 +291,7 @@ void DrawBoard()
             {
                 CursorJump(2 * c, r);
                 SetColor(r == kRows - 1 || c == 0 || c == kColumns - 1 ? 7 : pieces.color(board.at(r, c).shape));
-                std::cout << "■";
+                cout << "■";
             }
 }
 Piece RandomPiece()
@@ -298,19 +300,19 @@ Piece RandomPiece()
 }
 void ReadGrade()
 {
-    std::ifstream in(kScoreFile);
+    ifstream in(kScoreFile);
     int highScore = 0;
     if (in >> highScore)
         game.score.load(highScore);
     else
     {
         game.score.load(0);
-        std::ofstream(kScoreFile) << 0;
+        ofstream(kScoreFile) << 0;
     }
 }
 void WriteGrade()
 {
-    std::ofstream out(kScoreFile);
+    ofstream out(kScoreFile);
     if (out)
         out << game.score.high();
 }
@@ -320,25 +322,25 @@ void InitInterface()
     SetColor(7);
     DrawBoard();
     CursorJump(2 * kColumns, 1);
-    std::cout << "下一个方块：";
+    cout << "下一个方块：";
     CursorJump(2 * kColumns + 4, kRows - 19);
-    std::cout << "左移：←";
+    cout << "左移：←";
     CursorJump(2 * kColumns + 4, kRows - 17);
-    std::cout << "右移：→";
+    cout << "右移：→";
     CursorJump(2 * kColumns + 4, kRows - 15);
-    std::cout << "加速：↓";
+    cout << "加速：↓";
     CursorJump(2 * kColumns + 4, kRows - 13);
-    std::cout << "旋转：空格";
+    cout << "旋转：空格";
     CursorJump(2 * kColumns + 4, kRows - 11);
-    std::cout << "暂停: S";
+    cout << "暂停: S";
     CursorJump(2 * kColumns + 4, kRows - 9);
-    std::cout << "退出: Esc";
+    cout << "退出: Esc";
     CursorJump(2 * kColumns + 4, kRows - 7);
-    std::cout << "重新开始:R";
+    cout << "重新开始:R";
     CursorJump(2 * kColumns + 4, kRows - 5);
-    std::cout << "最高纪录:" << game.score.high();
+    cout << "最高纪录:" << game.score.high();
     CursorJump(2 * kColumns + 4, kRows - 3);
-    std::cout << "当前分数：" << game.score.current();
+    cout << "当前分数：" << game.score.current();
 }
 void StartGame()
 {
