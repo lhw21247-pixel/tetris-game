@@ -1,47 +1,43 @@
+#include <stdio.h>
 #include <Windows.h>
-#include <algorithm>
-#include <array>
+#include <stdlib.h>
+#include <time.h>
 #include <conio.h>
 #include <fstream>
 #include <iostream>
-#include <random>
+#include <algorithm>
 
 using namespace std;
 
-namespace tetris
+#define ROW 29
+#define COL 20
+#define DOWN 80
+#define LEFT 75
+#define RIGHT 77
+#define UP 72
+#define SPACE 32
+#define ESC 27
+#define ENTER 13
+
+#define FLASH_TIMES 3
+#define FLASH_DELAY 80
+#define GRAY_COLOR 8
+#define RANK_SIZE 5
+
+constexpr char SCORE_FILE[] = "high_score.txt";
+constexpr char RANK_FILE[] = "leaderboard.txt";
+
+struct Face
 {
-constexpr int kRows = 29, kColumns = 20, kPieceSize = 4, kShapeCount = 7, kRotationCount = 4;
-constexpr char kScoreFile[] = "high_score.txt";
-constexpr char kRankFile[] = "leaderboard.txt";
-constexpr int kRankSize = 5;
-using Grid = array<array<unsigned char, 4>, 4>;
-enum class Shape : unsigned char
+    int data[ROW][COL + 10];
+    int color[ROW][COL + 10];
+} face;
+
+struct Block
 {
-    T,
-    L,
-    J,
-    Z,
-    S,
-    O,
-    I
-};
-enum class Rotation : unsigned char
-{
-    R0,
-    R90,
-    R180,
-    R270
-};
-struct Piece
-{
-    Shape shape;
-    Rotation rotation;
-};
-struct Cell
-{
-    bool occupied = false;
-    Shape shape = Shape::T;
-};
+    int space[4][4];
+} block[7][4];
+
 struct Difficulty
 {
     const char *name;
@@ -50,180 +46,33 @@ struct Difficulty
     int minimumInterval;
     int linesPerLevel;
 };
-constexpr int index(Shape s)
-{
-    return static_cast<int>(s);
-}
-constexpr int index(Rotation r)
-{
-    return static_cast<int>(r);
-}
-
-class PieceSet
-{
-    array<array<Grid, 4>, 7> cells_{};
-    static Grid rotate(const Grid &source)
-    {
-        Grid result{};
-        for (int r = 0; r < 4; ++r)
-            for (int c = 0; c < 4; ++c)
-                result[r][c] = source[3 - c][r];
-        return result;
-    }
-
-  public:
-    PieceSet()
-    {
-        auto &t = cells_[index(Shape::T)][0];
-        t[1][0] = t[1][1] = t[1][2] = t[2][1] = 1;
-        auto &l = cells_[index(Shape::L)][0];
-        for (int r = 1; r <= 3; ++r)
-            l[r][1] = 1;
-        l[3][2] = 1;
-        auto &j = cells_[index(Shape::J)][0];
-        for (int r = 1; r <= 3; ++r)
-            j[r][2] = 1;
-        j[3][1] = 1;
-        auto &z = cells_[index(Shape::Z)][0];
-        z[1][0] = z[1][1] = z[2][1] = z[2][2] = 1;
-        auto &s = cells_[index(Shape::S)][0];
-        s[1][1] = s[1][2] = s[2][0] = s[2][1] = 1;
-        auto &o = cells_[index(Shape::O)][0];
-        o[1][1] = o[1][2] = o[2][1] = o[2][2] = 1;
-        auto &i = cells_[index(Shape::I)][0];
-        for (int r = 0; r < 4; ++r)
-            i[r][1] = 1;
-        for (int sh = 0; sh < 7; ++sh)
-            for (int ro = 1; ro < 4; ++ro)
-                cells_[sh][ro] = rotate(cells_[sh][ro - 1]);
-    }
-    const Grid &cells(Piece p) const
-    {
-        return cells_[index(p.shape)][index(p.rotation)];
-    }
-    int color(Shape s) const
-    {
-        switch (s)
-        {
-        case Shape::T:
-            return 13;
-        case Shape::L:
-        case Shape::J:
-            return 12;
-        case Shape::Z:
-        case Shape::S:
-            return 10;
-        case Shape::O:
-            return 14;
-        case Shape::I:
-            return 11;
-        }
-        return 7;
-    }
-};
-
-class Board
-{
-    array<array<Cell, kColumns>, kRows> cells_{};
-
-  public:
-    Board()
-    {
-        reset();
-    }
-    void reset()
-    {
-        for (auto &row : cells_)
-            for (auto &cell : row)
-                cell = {};
-        for (int r = 0; r < kRows; ++r)
-        {
-            cells_[r][0].occupied = true;
-            cells_[r][kColumns - 1].occupied = true;
-        }
-        for (auto &cell : cells_[kRows - 1])
-            cell.occupied = true;
-    }
-    bool occupied(int r, int c) const
-    {
-        return r < 0 || r >= kRows || c < 0 || c >= kColumns || cells_[r][c].occupied;
-    }
-    bool canPlace(const PieceSet &ps, Piece p, int x, int y) const
-    {
-        const auto &g = ps.cells(p);
-        for (int r = 0; r < 4; ++r)
-            for (int c = 0; c < 4; ++c)
-                if (g[r][c] && occupied(y + r, x + c))
-                    return false;
-        return true;
-    }
-    void lock(const PieceSet &ps, Piece p, int x, int y)
-    {
-        const auto &g = ps.cells(p);
-        for (int r = 0; r < 4; ++r)
-            for (int c = 0; c < 4; ++c)
-                if (g[r][c] && y + r >= 0 && y + r < kRows && x + c >= 0 && x + c < kColumns)
-                    cells_[y + r][x + c] = {true, p.shape};
-    }
-    int clearFullRows()
-    {
-        int cleared = 0;
-        for (int r = kRows - 2; r > 0; --r)
-        {
-            bool full =
-                all_of(cells_[r].begin() + 1, cells_[r].end() - 1, [](const Cell &c) { return c.occupied; });
-            if (!full)
-                continue;
-            ++cleared;
-            for (int m = r; m > 1; --m)
-                cells_[m] = cells_[m - 1];
-            cells_[1].fill({});
-            ++r;
-        }
-        return cleared;
-    }
-    bool topOccupied() const
-    {
-        for (int c = 1; c < kColumns - 1; ++c)
-            if (cells_[1][c].occupied)
-                return true;
-        return false;
-    }
-    const Cell &at(int r, int c) const
-    {
-        return cells_[r][c];
-    }
-    int shadowY(const PieceSet &ps, Piece p, int x, int y) const
-    {
-        int result = y;
-        while (canPlace(ps, p, x, result + 1))
-            ++result;
-        return result;
-    }
-};
 
 class ScoreBoard
 {
     int current_ = 0;
     int high_ = 0;
 
-  public:
+public:
     int current() const
     {
         return current_;
     }
+
     int high() const
     {
         return high_;
     }
+
     void load(int highScore)
     {
         high_ = max(0, highScore);
     }
+
     void reset()
     {
         current_ = 0;
     }
+
     void addLines(int lines)
     {
         current_ += lines * 10;
@@ -233,404 +82,854 @@ class ScoreBoard
 
 class Leaderboard
 {
-    array<int, kRankSize> scores_{};
+    int scores_[RANK_SIZE] = {};
 
-  public:
-    int best() const
-    {
-        return scores_[0];
-    }
+public:
     int at(int place) const
     {
         return scores_[place];
     }
+
     void add(int score)
     {
-        scores_[kRankSize - 1] = score;
-        for (int i = 0; i < kRankSize; ++i)
-            for (int j = i + 1; j < kRankSize; ++j)
+        scores_[RANK_SIZE - 1] = score;
+
+        for (int i = 0; i < RANK_SIZE; i++)
+        {
+            for (int j = i + 1; j < RANK_SIZE; j++)
+            {
                 if (scores_[j] > scores_[i])
+                {
                     swap(scores_[i], scores_[j]);
+                }
+            }
+        }
     }
+
     void load()
     {
-        ifstream input(kRankFile);
-        for (int &score : scores_)
-            if (!(input >> score))
-                score = 0;
+        ifstream input(RANK_FILE);
+
+        for (int i = 0; i < RANK_SIZE; i++)
+        {
+            if (!(input >> scores_[i]))
+            {
+                scores_[i] = 0;
+            }
+        }
     }
+
     void save() const
     {
-        ofstream output(kRankFile);
-        for (int score : scores_)
-            output << score << '\n';
+        ofstream output(RANK_FILE);
+
+        for (int i = 0; i < RANK_SIZE; i++)
+        {
+            output << scores_[i] << '\n';
+        }
     }
 };
 
 struct GameState
 {
-    Piece current{Shape::T, Rotation::R0}, next{Shape::T, Rotation::R0};
-    ScoreBoard score;
+    int shape = 0;
+    int form = 0;
+    int nextShape = 0;
+    int nextForm = 0;
     Difficulty difficulty{"普通", 140, 10, 40, 10};
     int level = 1;
     int totalLines = 0;
-    void reset(Piece a, Piece b, Difficulty selectedDifficulty)
+    ScoreBoard score;
+
+    void reset(Difficulty selectedDifficulty)
     {
-        score.reset();
-        current = a;
-        next = b;
+        shape = rand() % 7;
+        form = rand() % 4;
+        nextShape = rand() % 7;
+        nextForm = rand() % 4;
         difficulty = selectedDifficulty;
         level = 1;
         totalLines = 0;
+        score.reset();
     }
+
     void addLines(int lines)
     {
         if (lines <= 0)
+        {
             return;
+        }
+
         score.addLines(lines);
         totalLines += lines;
         level = totalLines / difficulty.linesPerLevel + 1;
     }
+
     int dropInterval() const
     {
         int interval = difficulty.initialInterval - (level - 1) * difficulty.intervalStep;
         return max(interval, difficulty.minimumInterval);
     }
 };
-} // namespace tetris
-using namespace tetris;
-Board board;
-PieceSet pieces;
+
 GameState game;
 Leaderboard leaderboard;
-mt19937 rng{random_device{}()};
-void ConfigureConsoleEncoding()
-{
-    // 源文件和界面文本使用 UTF-8；让 Windows 控制台用同一编码解释输出字节。
-    SetConsoleOutputCP(CP_UTF8);
-    SetConsoleCP(CP_UTF8);
-}
-void HideCursor()
-{
-    CONSOLE_CURSOR_INFO i{1, FALSE};
-    SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &i);
-}
-void CursorJump(int x, int y)
-{
-    SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), COORD{(SHORT)x, (SHORT)y});
-}
-void SetColor(int c)
-{
-    SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), (WORD)c);
-}
-void DrawPiece(Piece p, int x, int y, int colorOverride = -1)
-{
-    const auto &g = pieces.cells(p);
-    SetColor(colorOverride < 0 ? pieces.color(p.shape) : colorOverride);
-    for (int r = 0; r < 4; ++r)
-        for (int c = 0; c < 4; ++c)
-            if (g[r][c])
-            {
-                CursorJump(2 * (x + c), y + r);
-                cout << "■";
-            }
-}
-void ErasePiece(Piece p, int x, int y)
-{
-    const auto &g = pieces.cells(p);
-    for (int r = 0; r < 4; ++r)
-        for (int c = 0; c < 4; ++c)
-            if (g[r][c])
-            {
-                CursorJump(2 * (x + c), y + r);
-                cout << "  ";
-            }
-}
-void ClearPreviewArea(int x, int y)
-{
-    SetColor(7);
-    for (int r = 0; r < kPieceSize; ++r)
-        for (int c = 0; c < kPieceSize; ++c)
-        {
-            CursorJump(2 * (x + c), y + r);
-            cout << "  ";
-        }
-}
-void DrawBoard()
-{
-    for (int r = 0; r < kRows; ++r)
-        for (int c = 0; c < kColumns; ++c)
-            if (board.at(r, c).occupied)
-            {
-                CursorJump(2 * c, r);
-                SetColor(r == kRows - 1 || c == 0 || c == kColumns - 1 ? 7 : pieces.color(board.at(r, c).shape));
-                cout << "■";
-            }
-}
-Piece RandomPiece()
-{
-    return {static_cast<Shape>(rng() % kShapeCount), static_cast<Rotation>(rng() % kRotationCount)};
-}
-void ReadGrade()
-{
-    ifstream in(kScoreFile);
-    int highScore = 0;
-    if (in >> highScore)
-        game.score.load(highScore);
-    else
-    {
-        game.score.load(0);
-        ofstream(kScoreFile) << 0;
-    }
-}
-void WriteGrade()
-{
-    ofstream out(kScoreFile);
-    if (out)
-        out << game.score.high();
-}
-int ReadMenuKey()
-{
-    int key = getch();
-    if (key == 0 || key == 224)
-        key = getch();
-    return key;
-}
-Difficulty SelectDifficulty()
-{
-    Difficulty options[] = {
-        {"简单", 280, 20, 80, 15},
-        {"普通", 140, 10, 40, 10},
-        {"困难", 93, 7, 27, 8}};
-    int selected = 1;
-    while (true)
-    {
-        system("cls");
-        SetColor(14);
-        CursorJump(24, 7);
-        cout << "选择难度";
-        for (int i = 0; i < 3; ++i)
-        {
-            CursorJump(24, 11 + i * 2);
-            SetColor(i == selected ? 11 : 7);
-            cout << (i == selected ? "> " : "  ") << options[i].name << "模式";
-        }
-        SetColor(8);
-        CursorJump(17, 20);
-        cout << "上下键选择，回车确认，Esc返回";
-        int key = ReadMenuKey();
-        if (key == 72 && selected > 0)
-            --selected;
-        else if (key == 80 && selected < 2)
-            ++selected;
-        else if (key == 13)
-            return options[selected];
-        else if (key == 27)
-            return options[1];
-    }
-}
-void ShowLeaderboard()
-{
-    system("cls");
-    SetColor(14);
-    CursorJump(24, 6);
-    cout << "排行榜";
-    SetColor(7);
-    for (int i = 0; i < kRankSize; ++i)
-    {
-        CursorJump(22, 10 + i * 2);
-        if (leaderboard.at(i) > 0)
-            cout << "第" << i + 1 << "名：" << leaderboard.at(i) << " 分";
-        else
-            cout << "第" << i + 1 << "名：---";
-    }
-    SetColor(8);
-    CursorJump(19, 22);
-    cout << "按任意键返回主菜单";
-    getch();
-}
-int MainMenu()
-{
-    int selected = 0;
-    while (true)
-    {
-        system("cls");
-        SetColor(14);
-        CursorJump(22, 7);
-        cout << "俄罗斯方块";
-        const char *items[] = {"开始游戏", "排行榜", "退出游戏"};
-        for (int i = 0; i < 3; ++i)
-        {
-            CursorJump(24, 12 + i * 2);
-            SetColor(i == selected ? 11 : 7);
-            cout << (i == selected ? "> " : "  ") << items[i];
-        }
-        SetColor(8);
-        CursorJump(18, 20);
-        cout << "上下键选择，回车确认";
-        int key = ReadMenuKey();
-        if (key == 72 && selected > 0)
-            --selected;
-        else if (key == 80 && selected < 2)
-            ++selected;
-        else if (key == 13)
-            return selected;
-        else if (key == 27)
-            return 2;
-    }
-}
-void InitInterface()
-{
-    system("cls");
-    SetColor(7);
-    DrawBoard();
-    CursorJump(2 * kColumns, 1);
-    cout << "下一个方块：";
-    CursorJump(2 * kColumns + 4, kRows - 19);
-    cout << "左移：←";
-    CursorJump(2 * kColumns + 4, kRows - 17);
-    cout << "右移：→";
-    CursorJump(2 * kColumns + 4, kRows - 15);
-    cout << "加速：↓";
-    CursorJump(2 * kColumns + 4, kRows - 13);
-    cout << "旋转：空格";
-    CursorJump(2 * kColumns + 4, kRows - 11);
-    cout << "暂停: S";
-    CursorJump(2 * kColumns + 4, kRows - 9);
-    cout << "退出: Esc";
-    CursorJump(2 * kColumns + 4, kRows - 7);
-    cout << "重新开始:R";
-    CursorJump(2 * kColumns + 4, kRows - 6);
-    cout << "难度：" << game.difficulty.name;
-    CursorJump(2 * kColumns + 4, kRows - 5);
-    cout << "最高纪录:" << game.score.high();
-    CursorJump(2 * kColumns + 4, kRows - 4);
-    cout << "当前等级:" << game.level;
-    CursorJump(2 * kColumns + 4, kRows - 3);
-    cout << "当前分数：" << game.score.current();
-}
-void StartGame()
-{
-    game.reset(RandomPiece(), RandomPiece(), game.difficulty);
-    while (true)
-    {
-        Piece p = game.current, n = game.next;
-        int x = kColumns / 2 - 2, y = 0;
-        bool restarted = false;
-        DWORD lastDrop = GetTickCount();
-        ClearPreviewArea(kColumns + 3, 3);
-        DrawPiece(n, kColumns + 3, 3);
-        while (true)
-        {
-            int shadowY = board.shadowY(pieces, p, x, y);
-            DrawPiece(p, x, shadowY, 8);
-            DrawPiece(p, x, y);
-            if (GetTickCount() - lastDrop >= static_cast<DWORD>(game.dropInterval()))
-            {
-                lastDrop = GetTickCount();
-                if (!board.canPlace(pieces, p, x, y + 1))
-                {
-                    board.lock(pieces, p, x, y);
-                    int lines = board.clearFullRows();
-                    game.addLines(lines);
-                    DrawBoard();
-                    if (lines)
-                        InitInterface();
-                    break;
-                }
-                ErasePiece(p, x, shadowY);
-                ErasePiece(p, x, y);
-                DrawBoard();
-                ++y;
-            }
-            else if (kbhit())
-            {
-                int key = ReadMenuKey();
-                if (key == 80 && board.canPlace(pieces, p, x, y + 1))
-                {
-                    ErasePiece(p, x, shadowY);
-                    ErasePiece(p, x, y);
-                    DrawBoard();
-                    ++y;
-                }
-                else if (key == 75 && board.canPlace(pieces, p, x - 1, y))
-                {
-                    ErasePiece(p, x, shadowY);
-                    ErasePiece(p, x, y);
-                    DrawBoard();
-                    --x;
-                }
-                else if (key == 77 && board.canPlace(pieces, p, x + 1, y))
-                {
-                    ErasePiece(p, x, shadowY);
-                    ErasePiece(p, x, y);
-                    DrawBoard();
-                    ++x;
-                }
-                else if (key == 32)
-                {
-                    Piece q{p.shape, (Rotation)((index(p.rotation) + 1) % 4)};
-                    if (board.canPlace(pieces, q, x, y))
-                    {
-                        ErasePiece(p, x, shadowY);
-                        ErasePiece(p, x, y);
-                        DrawBoard();
-                        p = q;
-                    }
-                }
-                else if (key == 's' || key == 'S')
-                    system("pause>nul");
-                else if (key == 27)
-                {
-                    WriteGrade();
-                    return;
-                }
-                else if (key == 'r' || key == 'R')
-                {
-                    board.reset();
-                    game.reset(RandomPiece(), RandomPiece(), game.difficulty);
-                    InitInterface();
-                    restarted = true;
-                    break;
-                }
-            }
-        }
-        if (restarted)
-            continue;
-        if (board.topOccupied())
-        {
-            leaderboard.add(game.score.current());
-            leaderboard.save();
-            WriteGrade();
-            return;
-        }
-        game.current = n;
-        game.next = RandomPiece();
-    }
-}
+
+void ConfigureConsoleEncoding();
+void HideCursor();
+void CursorJump(int x, int y);
+void color(int num);
+int ReadMenuKey();
+
+void ResetGameData();
+void InitInterface();
+void InitBlockInfo();
+void DrawBoard();
+void DrawBlock(int shape, int form, int x, int y, int colorOverride = -1);
+void DrawSpace(int shape, int form, int x, int y);
+void ClearPreviewArea(int x, int y);
+
+int IsLegal(int shape, int form, int x, int y);
+int CalcShadowY(int shape, int form, int x, int y);
+int IsGameOver();
+void LockBlock(int shape, int form, int x, int y);
+int ClearFullRows();
+
+Difficulty SelectDifficulty();
+int MainMenu();
+void ShowLeaderboard();
+
+void ReadGrade();
+void WriteGrade();
+void PauseGame();
+void StartGame();
+
 int main()
 {
     ConfigureConsoleEncoding();
     system("title 俄罗斯方块");
     system("mode con lines=29 cols=60");
     HideCursor();
+    InitBlockInfo();
+    srand((unsigned int)time(NULL));
     ReadGrade();
     leaderboard.load();
+
     while (true)
     {
         int choice = MainMenu();
+
         if (choice == 0)
         {
-            game.difficulty = SelectDifficulty();
-            board.reset();
-            game.reset(RandomPiece(), RandomPiece(), game.difficulty);
+            Difficulty difficulty = SelectDifficulty();
+            ResetGameData();
+            game.reset(difficulty);
             InitInterface();
             StartGame();
         }
         else if (choice == 1)
+        {
             ShowLeaderboard();
+        }
         else
+        {
             break;
+        }
     }
+
     return 0;
+}
+
+void ConfigureConsoleEncoding()
+{
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+
+    HANDLE output = GetStdHandle(STD_OUTPUT_HANDLE);
+    DWORD mode = 0;
+    GetConsoleMode(output, &mode);
+    mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+    SetConsoleMode(output, mode);
+}
+
+void HideCursor()
+{
+    CONSOLE_CURSOR_INFO info;
+    info.dwSize = 1;
+    info.bVisible = FALSE;
+    SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &info);
+}
+
+void CursorJump(int x, int y)
+{
+    COORD position;
+    position.X = x;
+    position.Y = y;
+    SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), position);
+}
+
+void color(int num)
+{
+    int consoleColor = num;
+
+    if (num >= 0 && num <= 6)
+    {
+        switch (num)
+        {
+        case 0:
+            consoleColor = 13;
+            break;
+        case 1:
+        case 2:
+            consoleColor = 12;
+            break;
+        case 3:
+        case 4:
+            consoleColor = 10;
+            break;
+        case 5:
+            consoleColor = 14;
+            break;
+        case 6:
+            consoleColor = 11;
+            break;
+        }
+    }
+
+    SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), consoleColor);
+}
+
+void ResetGameData()
+{
+    for (int i = 0; i < ROW; i++)
+    {
+        for (int j = 0; j < COL + 10; j++)
+        {
+            face.data[i][j] = 0;
+            face.color[i][j] = 0;
+        }
+    }
+}
+
+void InitInterface()
+{
+    system("cls");
+    color(7);
+
+    for (int i = 0; i < ROW; i++)
+    {
+        for (int j = 0; j < COL + 10; j++)
+        {
+            if (j == 0 || j == COL - 1 || j == COL + 9)
+            {
+                face.data[i][j] = 1;
+                face.color[i][j] = 7;
+                CursorJump(2 * j, i);
+                cout << "■";
+            }
+            else if (i == ROW - 1)
+            {
+                face.data[i][j] = 1;
+                face.color[i][j] = 7;
+                CursorJump(2 * j, i);
+                cout << "■";
+            }
+        }
+    }
+
+    for (int i = COL; i < COL + 10; i++)
+    {
+        face.data[8][i] = 1;
+        face.color[8][i] = 7;
+        CursorJump(2 * i, 8);
+        cout << "■";
+    }
+
+    CursorJump(2 * COL, 1);
+    cout << "下一个方块：";
+
+    CursorJump(2 * COL + 4, ROW - 19);
+    cout << "左移：←";
+    CursorJump(2 * COL + 4, ROW - 17);
+    cout << "右移：→";
+    CursorJump(2 * COL + 4, ROW - 15);
+    cout << "加速：↓";
+    CursorJump(2 * COL + 4, ROW - 13);
+    cout << "旋转：空格";
+    CursorJump(2 * COL + 4, ROW - 11);
+    cout << "暂停：S";
+    CursorJump(2 * COL + 4, ROW - 9);
+    cout << "退出：Esc";
+    CursorJump(2 * COL + 4, ROW - 7);
+    cout << "重新开始：R";
+    CursorJump(2 * COL + 4, ROW - 6);
+    cout << "难度：" << game.difficulty.name;
+    CursorJump(2 * COL + 4, ROW - 5);
+    cout << "最高纪录：" << game.score.high();
+    CursorJump(2 * COL + 4, ROW - 4);
+    cout << "当前等级：" << game.level;
+    CursorJump(2 * COL + 4, ROW - 3);
+    cout << "当前分数：" << game.score.current();
+}
+
+void InitBlockInfo()
+{
+    for (int i = 0; i <= 2; i++)
+    {
+        block[0][0].space[1][i] = 1;
+    }
+    block[0][0].space[2][1] = 1;
+
+    for (int i = 1; i <= 3; i++)
+    {
+        block[1][0].space[i][1] = 1;
+        block[2][0].space[i][2] = 1;
+    }
+    block[1][0].space[3][2] = 1;
+    block[2][0].space[3][1] = 1;
+
+    for (int i = 0; i <= 1; i++)
+    {
+        block[3][0].space[1][i] = 1;
+        block[3][0].space[2][i + 1] = 1;
+
+        block[4][0].space[1][i + 1] = 1;
+        block[4][0].space[2][i] = 1;
+
+        block[5][0].space[1][i + 1] = 1;
+        block[5][0].space[2][i + 1] = 1;
+    }
+
+    for (int i = 0; i <= 3; i++)
+    {
+        block[6][0].space[i][1] = 1;
+    }
+
+    int temp[4][4];
+
+    for (int shape = 0; shape < 7; shape++)
+    {
+        for (int form = 0; form < 3; form++)
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                for (int j = 0; j < 4; j++)
+                {
+                    temp[i][j] = block[shape][form].space[i][j];
+                }
+            }
+
+            for (int i = 0; i < 4; i++)
+            {
+                for (int j = 0; j < 4; j++)
+                {
+                    block[shape][form + 1].space[i][j] = temp[3 - j][i];
+                }
+            }
+        }
+    }
+}
+
+void DrawBlock(int shape, int form, int x, int y, int colorOverride)
+{
+    const int drawColor = colorOverride >= 0 ? colorOverride : shape;
+    color(drawColor);
+
+    for (int i = 0; i < 4; i++)
+    {
+        for (int j = 0; j < 4; j++)
+        {
+            if (block[shape][form].space[i][j] == 1)
+            {
+                CursorJump(2 * (x + j), y + i);
+                cout << "■";
+            }
+        }
+    }
+}
+
+void DrawSpace(int shape, int form, int x, int y)
+{
+    for (int i = 0; i < 4; i++)
+    {
+        for (int j = 0; j < 4; j++)
+        {
+            if (block[shape][form].space[i][j] == 1)
+            {
+                CursorJump(2 * (x + j), y + i);
+                cout << "  ";
+            }
+        }
+    }
+}
+
+void ClearPreviewArea(int x, int y)
+{
+    color(7);
+
+    for (int i = 0; i < 4; i++)
+    {
+        for (int j = 0; j < 4; j++)
+        {
+            CursorJump(2 * (x + j), y + i);
+            cout << "  ";
+        }
+    }
+}
+
+void DrawBoard()
+{
+    for (int i = 0; i < ROW; i++)
+    {
+        for (int j = 0; j < COL + 10; j++)
+        {
+            if (face.data[i][j] == 1)
+            {
+                color(face.color[i][j]);
+                CursorJump(2 * j, i);
+                cout << "■";
+            }
+        }
+    }
+}
+
+int IsLegal(int shape, int form, int x, int y)
+{
+    for (int i = 0; i < 4; i++)
+    {
+        for (int j = 0; j < 4; j++)
+        {
+            if (block[shape][form].space[i][j] == 1)
+            {
+                int boardY = y + i;
+                int boardX = x + j;
+
+                if (boardY < 0 || boardY >= ROW || boardX < 0 || boardX >= COL)
+                {
+                    return 0;
+                }
+
+                if (face.data[boardY][boardX] == 1)
+                {
+                    return 0;
+                }
+            }
+        }
+    }
+
+    return 1;
+}
+
+int CalcShadowY(int shape, int form, int x, int y)
+{
+    int shadowY = y;
+
+    while (IsLegal(shape, form, x, shadowY + 1))
+    {
+        shadowY++;
+    }
+
+    return shadowY;
+}
+
+int IsGameOver()
+{
+    for (int col = 1; col < COL - 1; col++)
+    {
+        if (face.data[1][col] == 1)
+        {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+void LockBlock(int shape, int form, int x, int y)
+{
+    for (int i = 0; i < 4; i++)
+    {
+        for (int j = 0; j < 4; j++)
+        {
+            if (block[shape][form].space[i][j] == 1)
+            {
+                face.data[y + i][x + j] = 1;
+                face.color[y + i][x + j] = shape;
+            }
+        }
+    }
+}
+
+int ClearFullRows()
+{
+    int cleared = 0;
+
+    for (int row = ROW - 2; row > 0; row--)
+    {
+        bool full = true;
+
+        for (int col = 1; col < COL - 1; col++)
+        {
+            if (face.data[row][col] == 0)
+            {
+                full = false;
+                break;
+            }
+        }
+
+        if (!full)
+        {
+            continue;
+        }
+
+        cleared++;
+
+        for (int flash = 0; flash < FLASH_TIMES; flash++)
+        {
+            color(7);
+
+            for (int col = 1; col < COL - 1; col++)
+            {
+                CursorJump(2 * col, row);
+                cout << "■";
+            }
+
+            Sleep(FLASH_DELAY);
+
+            for (int col = 1; col < COL - 1; col++)
+            {
+                CursorJump(2 * col, row);
+                cout << "  ";
+            }
+
+            Sleep(FLASH_DELAY);
+        }
+
+        for (int moveRow = row; moveRow > 1; moveRow--)
+        {
+            for (int col = 1; col < COL - 1; col++)
+            {
+                face.data[moveRow][col] = face.data[moveRow - 1][col];
+                face.color[moveRow][col] = face.color[moveRow - 1][col];
+            }
+        }
+
+        for (int col = 1; col < COL - 1; col++)
+        {
+            face.data[1][col] = 0;
+            face.color[1][col] = 0;
+        }
+
+        row++;
+    }
+
+    return cleared;
+}
+
+int ReadMenuKey()
+{
+    int key = getch();
+
+    if (key == 0 || key == 224)
+    {
+        key = getch();
+    }
+
+    return key;
+}
+
+int MainMenu()
+{
+    int selected = 0;
+    const char *items[] = {"开始游戏", "排行榜", "退出游戏"};
+
+    while (true)
+    {
+        system("cls");
+        color(14);
+        CursorJump(22, 7);
+        cout << "俄罗斯方块";
+
+        for (int i = 0; i < 3; i++)
+        {
+            CursorJump(24, 12 + i * 2);
+            color(i == selected ? 11 : 7);
+            cout << (i == selected ? "> " : "  ") << items[i];
+        }
+
+        color(8);
+        CursorJump(18, 20);
+        cout << "上下键选择，回车确认";
+
+        int key = ReadMenuKey();
+
+        if (key == UP && selected > 0)
+        {
+            selected--;
+        }
+        else if (key == DOWN && selected < 2)
+        {
+            selected++;
+        }
+        else if (key == ENTER)
+        {
+            return selected;
+        }
+        else if (key == ESC)
+        {
+            return 2;
+        }
+    }
+}
+
+Difficulty SelectDifficulty()
+{
+    Difficulty options[] = {
+        {"简单", 280, 20, 80, 15},
+        {"普通", 140, 10, 40, 10},
+        {"困难", 93, 7, 27, 8}};
+
+    int selected = 1;
+
+    while (true)
+    {
+        system("cls");
+        color(14);
+        CursorJump(24, 7);
+        cout << "选择难度";
+
+        for (int i = 0; i < 3; i++)
+        {
+            CursorJump(24, 11 + i * 2);
+            color(i == selected ? 11 : 7);
+            cout << (i == selected ? "> " : "  ") << options[i].name << "模式";
+        }
+
+        color(8);
+        CursorJump(17, 20);
+        cout << "上下键选择，回车确认，Esc返回";
+
+        int key = ReadMenuKey();
+
+        if (key == UP && selected > 0)
+        {
+            selected--;
+        }
+        else if (key == DOWN && selected < 2)
+        {
+            selected++;
+        }
+        else if (key == ENTER)
+        {
+            return options[selected];
+        }
+        else if (key == ESC)
+        {
+            return options[1];
+        }
+    }
+}
+
+void ShowLeaderboard()
+{
+    system("cls");
+    color(14);
+    CursorJump(24, 6);
+    cout << "排行榜";
+
+    color(7);
+
+    for (int i = 0; i < RANK_SIZE; i++)
+    {
+        CursorJump(22, 10 + i * 2);
+
+        if (leaderboard.at(i) > 0)
+        {
+            cout << "第" << i + 1 << "名：" << leaderboard.at(i) << " 分";
+        }
+        else
+        {
+            cout << "第" << i + 1 << "名：---";
+        }
+    }
+
+    color(8);
+    CursorJump(19, 22);
+    cout << "按任意键返回主菜单";
+    getch();
+}
+
+void PauseGame()
+{
+    color(7);
+    CursorJump(2 * (COL / 3), ROW / 2);
+    cout << "  游戏暂停  ";
+    CursorJump(2 * (COL / 3) - 2, ROW / 2 + 2);
+    cout << "按任意键继续...";
+
+    while (!kbhit())
+    {
+        Sleep(50);
+    }
+
+    getch();
+
+    CursorJump(2 * (COL / 3), ROW / 2);
+    cout << "            ";
+    CursorJump(2 * (COL / 3) - 2, ROW / 2 + 2);
+    cout << "                ";
+}
+
+void ReadGrade()
+{
+    ifstream input(SCORE_FILE);
+    int highScore = 0;
+
+    if (input >> highScore)
+    {
+        game.score.load(highScore);
+    }
+    else
+    {
+        game.score.load(0);
+        ofstream output(SCORE_FILE);
+        output << 0;
+    }
+}
+
+void WriteGrade()
+{
+    ofstream output(SCORE_FILE);
+
+    if (output)
+    {
+        output << game.score.high();
+    }
+}
+
+void StartGame()
+{
+    game.reset(game.difficulty);
+
+    while (true)
+    {
+        int shape = game.shape;
+        int form = game.form;
+        int x = COL / 2 - 2;
+        int y = 0;
+        bool restarted = false;
+        DWORD lastDrop = GetTickCount();
+
+        ClearPreviewArea(COL + 3, 3);
+        DrawBlock(game.nextShape, game.nextForm, COL + 3, 3);
+
+        while (true)
+        {
+            int shadowY = CalcShadowY(shape, form, x, y);
+            DrawBlock(shape, form, x, shadowY, GRAY_COLOR);
+            DrawBlock(shape, form, x, y);
+
+            if (GetTickCount() - lastDrop >= (DWORD)game.dropInterval())
+            {
+                lastDrop = GetTickCount();
+
+                if (!IsLegal(shape, form, x, y + 1))
+                {
+                    DrawSpace(shape, form, x, shadowY);
+                    DrawSpace(shape, form, x, y);
+                    LockBlock(shape, form, x, y);
+
+                    int lines = ClearFullRows();
+                    game.addLines(lines);
+                    DrawBoard();
+                    InitInterface();
+                    break;
+                }
+
+                DrawSpace(shape, form, x, shadowY);
+                DrawSpace(shape, form, x, y);
+                y++;
+            }
+            else if (kbhit())
+            {
+                int key = ReadMenuKey();
+
+                if (key == DOWN && IsLegal(shape, form, x, y + 1))
+                {
+                    DrawSpace(shape, form, x, shadowY);
+                    DrawSpace(shape, form, x, y);
+                    y++;
+                }
+                else if (key == LEFT && IsLegal(shape, form, x - 1, y))
+                {
+                    DrawSpace(shape, form, x, shadowY);
+                    DrawSpace(shape, form, x, y);
+                    x--;
+                }
+                else if (key == RIGHT && IsLegal(shape, form, x + 1, y))
+                {
+                    DrawSpace(shape, form, x, shadowY);
+                    DrawSpace(shape, form, x, y);
+                    x++;
+                }
+                else if (key == SPACE)
+                {
+                    int nextForm = (form + 1) % 4;
+
+                    if (IsLegal(shape, nextForm, x, y))
+                    {
+                        DrawSpace(shape, form, x, shadowY);
+                        DrawSpace(shape, form, x, y);
+                        form = nextForm;
+                    }
+                }
+                else if (key == 's' || key == 'S')
+                {
+                    PauseGame();
+                }
+                else if (key == ESC)
+                {
+                    WriteGrade();
+                    return;
+                }
+                else if (key == 'r' || key == 'R')
+                {
+                    ResetGameData();
+                    game.reset(game.difficulty);
+                    InitInterface();
+                    restarted = true;
+                    break;
+                }
+            }
+        }
+
+        if (restarted)
+        {
+            continue;
+        }
+
+        if (IsGameOver())
+        {
+            leaderboard.add(game.score.current());
+            leaderboard.save();
+            WriteGrade();
+
+            system("cls");
+            color(14);
+            CursorJump(22, 10);
+            cout << "游戏结束";
+            color(7);
+            CursorJump(20, 13);
+            cout << "本局得分：" << game.score.current();
+            CursorJump(17, 16);
+            cout << "按任意键返回主菜单";
+            getch();
+            return;
+        }
+
+        game.shape = game.nextShape;
+        game.form = game.nextForm;
+        game.nextShape = rand() % 7;
+        game.nextForm = rand() % 4;
+    }
 }
