@@ -12,6 +12,8 @@ namespace tetris
 {
 constexpr int kRows = 29, kColumns = 20, kPieceSize = 4, kShapeCount = 7, kRotationCount = 4;
 constexpr char kScoreFile[] = "high_score.txt";
+constexpr char kRankFile[] = "leaderboard.txt";
+constexpr int kRankSize = 5;
 using Grid = array<array<unsigned char, 4>, 4>;
 enum class Shape : unsigned char
 {
@@ -39,6 +41,14 @@ struct Cell
 {
     bool occupied = false;
     Shape shape = Shape::T;
+};
+struct Difficulty
+{
+    const char *name;
+    int initialInterval;
+    int intervalStep;
+    int minimumInterval;
+    int linesPerLevel;
 };
 constexpr int index(Shape s)
 {
@@ -183,6 +193,13 @@ class Board
     {
         return cells_[r][c];
     }
+    int shadowY(const PieceSet &ps, Piece p, int x, int y) const
+    {
+        int result = y;
+        while (canPlace(ps, p, x, result + 1))
+            ++result;
+        return result;
+    }
 };
 
 class ScoreBoard
@@ -214,15 +231,70 @@ class ScoreBoard
     }
 };
 
+class Leaderboard
+{
+    array<int, kRankSize> scores_{};
+
+  public:
+    int best() const
+    {
+        return scores_[0];
+    }
+    int at(int place) const
+    {
+        return scores_[place];
+    }
+    void add(int score)
+    {
+        scores_[kRankSize - 1] = score;
+        for (int i = 0; i < kRankSize; ++i)
+            for (int j = i + 1; j < kRankSize; ++j)
+                if (scores_[j] > scores_[i])
+                    swap(scores_[i], scores_[j]);
+    }
+    void load()
+    {
+        ifstream input(kRankFile);
+        for (int &score : scores_)
+            if (!(input >> score))
+                score = 0;
+    }
+    void save() const
+    {
+        ofstream output(kRankFile);
+        for (int score : scores_)
+            output << score << '\n';
+    }
+};
+
 struct GameState
 {
     Piece current{Shape::T, Rotation::R0}, next{Shape::T, Rotation::R0};
     ScoreBoard score;
-    void reset(Piece a, Piece b)
+    Difficulty difficulty{"普通", 140, 10, 40, 10};
+    int level = 1;
+    int totalLines = 0;
+    void reset(Piece a, Piece b, Difficulty selectedDifficulty)
     {
         score.reset();
         current = a;
         next = b;
+        difficulty = selectedDifficulty;
+        level = 1;
+        totalLines = 0;
+    }
+    void addLines(int lines)
+    {
+        if (lines <= 0)
+            return;
+        score.addLines(lines);
+        totalLines += lines;
+        level = totalLines / difficulty.linesPerLevel + 1;
+    }
+    int dropInterval() const
+    {
+        int interval = difficulty.initialInterval - (level - 1) * difficulty.intervalStep;
+        return max(interval, difficulty.minimumInterval);
     }
 };
 } // namespace tetris
@@ -230,6 +302,7 @@ using namespace tetris;
 Board board;
 PieceSet pieces;
 GameState game;
+Leaderboard leaderboard;
 mt19937 rng{random_device{}()};
 void ConfigureConsoleEncoding()
 {
@@ -250,10 +323,10 @@ void SetColor(int c)
 {
     SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), (WORD)c);
 }
-void DrawPiece(Piece p, int x, int y)
+void DrawPiece(Piece p, int x, int y, int colorOverride = -1)
 {
     const auto &g = pieces.cells(p);
-    SetColor(pieces.color(p.shape));
+    SetColor(colorOverride < 0 ? pieces.color(p.shape) : colorOverride);
     for (int r = 0; r < 4; ++r)
         for (int c = 0; c < 4; ++c)
             if (g[r][c])
@@ -316,6 +389,96 @@ void WriteGrade()
     if (out)
         out << game.score.high();
 }
+int ReadMenuKey()
+{
+    int key = getch();
+    if (key == 0 || key == 224)
+        key = getch();
+    return key;
+}
+Difficulty SelectDifficulty()
+{
+    Difficulty options[] = {
+        {"简单", 280, 20, 80, 15},
+        {"普通", 140, 10, 40, 10},
+        {"困难", 93, 7, 27, 8}};
+    int selected = 1;
+    while (true)
+    {
+        system("cls");
+        SetColor(14);
+        CursorJump(24, 7);
+        cout << "选择难度";
+        for (int i = 0; i < 3; ++i)
+        {
+            CursorJump(24, 11 + i * 2);
+            SetColor(i == selected ? 11 : 7);
+            cout << (i == selected ? "> " : "  ") << options[i].name << "模式";
+        }
+        SetColor(8);
+        CursorJump(17, 20);
+        cout << "上下键选择，回车确认，Esc返回";
+        int key = ReadMenuKey();
+        if (key == 72 && selected > 0)
+            --selected;
+        else if (key == 80 && selected < 2)
+            ++selected;
+        else if (key == 13)
+            return options[selected];
+        else if (key == 27)
+            return options[1];
+    }
+}
+void ShowLeaderboard()
+{
+    system("cls");
+    SetColor(14);
+    CursorJump(24, 6);
+    cout << "排行榜";
+    SetColor(7);
+    for (int i = 0; i < kRankSize; ++i)
+    {
+        CursorJump(22, 10 + i * 2);
+        if (leaderboard.at(i) > 0)
+            cout << "第" << i + 1 << "名：" << leaderboard.at(i) << " 分";
+        else
+            cout << "第" << i + 1 << "名：---";
+    }
+    SetColor(8);
+    CursorJump(19, 22);
+    cout << "按任意键返回主菜单";
+    getch();
+}
+int MainMenu()
+{
+    int selected = 0;
+    while (true)
+    {
+        system("cls");
+        SetColor(14);
+        CursorJump(22, 7);
+        cout << "俄罗斯方块";
+        const char *items[] = {"开始游戏", "排行榜", "退出游戏"};
+        for (int i = 0; i < 3; ++i)
+        {
+            CursorJump(24, 12 + i * 2);
+            SetColor(i == selected ? 11 : 7);
+            cout << (i == selected ? "> " : "  ") << items[i];
+        }
+        SetColor(8);
+        CursorJump(18, 20);
+        cout << "上下键选择，回车确认";
+        int key = ReadMenuKey();
+        if (key == 72 && selected > 0)
+            --selected;
+        else if (key == 80 && selected < 2)
+            ++selected;
+        else if (key == 13)
+            return selected;
+        else if (key == 27)
+            return 2;
+    }
+}
 void InitInterface()
 {
     system("cls");
@@ -337,57 +500,71 @@ void InitInterface()
     cout << "退出: Esc";
     CursorJump(2 * kColumns + 4, kRows - 7);
     cout << "重新开始:R";
+    CursorJump(2 * kColumns + 4, kRows - 6);
+    cout << "难度：" << game.difficulty.name;
     CursorJump(2 * kColumns + 4, kRows - 5);
     cout << "最高纪录:" << game.score.high();
+    CursorJump(2 * kColumns + 4, kRows - 4);
+    cout << "当前等级:" << game.level;
     CursorJump(2 * kColumns + 4, kRows - 3);
     cout << "当前分数：" << game.score.current();
 }
 void StartGame()
 {
-    game.reset(RandomPiece(), RandomPiece());
+    game.reset(RandomPiece(), RandomPiece(), game.difficulty);
     while (true)
     {
         Piece p = game.current, n = game.next;
-        int x = kColumns / 2 - 2, y = 0, ticks = 10000;
+        int x = kColumns / 2 - 2, y = 0;
         bool restarted = false;
+        DWORD lastDrop = GetTickCount();
         ClearPreviewArea(kColumns + 3, 3);
         DrawPiece(n, kColumns + 3, 3);
         while (true)
         {
+            int shadowY = board.shadowY(pieces, p, x, y);
+            DrawPiece(p, x, shadowY, 8);
             DrawPiece(p, x, y);
-            if (ticks > 0)
-                --ticks;
-            if (ticks == 0)
+            if (GetTickCount() - lastDrop >= static_cast<DWORD>(game.dropInterval()))
             {
+                lastDrop = GetTickCount();
                 if (!board.canPlace(pieces, p, x, y + 1))
                 {
                     board.lock(pieces, p, x, y);
                     int lines = board.clearFullRows();
-                    game.score.addLines(lines);
+                    game.addLines(lines);
+                    DrawBoard();
                     if (lines)
                         InitInterface();
                     break;
                 }
+                ErasePiece(p, x, shadowY);
                 ErasePiece(p, x, y);
+                DrawBoard();
                 ++y;
-                ticks = 10000;
             }
             else if (kbhit())
             {
-                int key = getch();
+                int key = ReadMenuKey();
                 if (key == 80 && board.canPlace(pieces, p, x, y + 1))
                 {
+                    ErasePiece(p, x, shadowY);
                     ErasePiece(p, x, y);
+                    DrawBoard();
                     ++y;
                 }
                 else if (key == 75 && board.canPlace(pieces, p, x - 1, y))
                 {
+                    ErasePiece(p, x, shadowY);
                     ErasePiece(p, x, y);
+                    DrawBoard();
                     --x;
                 }
                 else if (key == 77 && board.canPlace(pieces, p, x + 1, y))
                 {
+                    ErasePiece(p, x, shadowY);
                     ErasePiece(p, x, y);
+                    DrawBoard();
                     ++x;
                 }
                 else if (key == 32)
@@ -395,7 +572,9 @@ void StartGame()
                     Piece q{p.shape, (Rotation)((index(p.rotation) + 1) % 4)};
                     if (board.canPlace(pieces, q, x, y))
                     {
+                        ErasePiece(p, x, shadowY);
                         ErasePiece(p, x, y);
+                        DrawBoard();
                         p = q;
                     }
                 }
@@ -409,7 +588,7 @@ void StartGame()
                 else if (key == 'r' || key == 'R')
                 {
                     board.reset();
-                    game.reset(RandomPiece(), RandomPiece());
+                    game.reset(RandomPiece(), RandomPiece(), game.difficulty);
                     InitInterface();
                     restarted = true;
                     break;
@@ -420,6 +599,8 @@ void StartGame()
             continue;
         if (board.topOccupied())
         {
+            leaderboard.add(game.score.current());
+            leaderboard.save();
             WriteGrade();
             return;
         }
@@ -434,7 +615,22 @@ int main()
     system("mode con lines=29 cols=60");
     HideCursor();
     ReadGrade();
-    InitInterface();
-    StartGame();
+    leaderboard.load();
+    while (true)
+    {
+        int choice = MainMenu();
+        if (choice == 0)
+        {
+            game.difficulty = SelectDifficulty();
+            board.reset();
+            game.reset(RandomPiece(), RandomPiece(), game.difficulty);
+            InitInterface();
+            StartGame();
+        }
+        else if (choice == 1)
+            ShowLeaderboard();
+        else
+            break;
+    }
     return 0;
 }
