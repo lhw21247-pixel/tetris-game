@@ -1,2 +1,26 @@
-tetris.exe
-leaderboard.txt
+# ========== 编辑器 / IDE ==========
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ========== 编译产物（g++ / MinGW 生成的可执行文件） ==========
+*.exe
+*.out
+*.o
+*.obj
+*.a
+*.lib
+*.dll
+*.pdb
+*.ilk
+
+# ========== 构建目录 ==========
+build/
+Debug/
+Release/
+x64/
+cmake-build-*/
+
+# ========== 运行时数据（游戏自动生成的高分存档） ==========
+high_score.txt
