@@ -92,17 +92,28 @@ public:
 
     void add(int score)
     {
-        scores_[RANK_SIZE - 1] = score;
+        int allScores[RANK_SIZE + 1];
 
         for (int i = 0; i < RANK_SIZE; i++)
         {
-            for (int j = i + 1; j < RANK_SIZE; j++)
+            allScores[i] = scores_[i];
+        }
+        allScores[RANK_SIZE] = score;
+
+        for (int i = 0; i < RANK_SIZE; i++)
+        {
+            for (int j = i + 1; j <= RANK_SIZE; j++)
             {
-                if (scores_[j] > scores_[i])
+                if (allScores[j] > allScores[i])
                 {
-                    swap(scores_[i], scores_[j]);
+                    swap(allScores[i], allScores[j]);
                 }
             }
+        }
+
+        for (int i = 0; i < RANK_SIZE; i++)
+        {
+            scores_[i] = allScores[i];
         }
     }
 
@@ -370,6 +381,7 @@ void InitInterface()
     cout << "当前等级：" << game.level;
     CursorJump(2 * COL + 4, ROW - 3);
     cout << "当前分数：" << game.score.current();
+    cout.flush();
 }
 
 void InitBlockInfo()
@@ -428,6 +440,7 @@ void InitBlockInfo()
             }
         }
     }
+    cout.flush();
 }
 
 void DrawBlock(int shape, int form, int x, int y, int colorOverride)
@@ -446,6 +459,7 @@ void DrawBlock(int shape, int form, int x, int y, int colorOverride)
             }
         }
     }
+    cout.flush();
 }
 
 void DrawSpace(int shape, int form, int x, int y)
@@ -461,6 +475,7 @@ void DrawSpace(int shape, int form, int x, int y)
             }
         }
     }
+    cout.flush();
 }
 
 void ClearPreviewArea(int x, int y)
@@ -475,6 +490,7 @@ void ClearPreviewArea(int x, int y)
             cout << "  ";
         }
     }
+    cout.flush();
 }
 
 void DrawBoard()
@@ -491,6 +507,7 @@ void DrawBoard()
             }
         }
     }
+    cout.flush();
 }
 
 int IsLegal(int shape, int form, int x, int y)
@@ -593,6 +610,7 @@ int ClearFullRows()
                 CursorJump(2 * col, row);
                 cout << "■";
             }
+            cout.flush();
 
             Sleep(FLASH_DELAY);
 
@@ -601,6 +619,7 @@ int ClearFullRows()
                 CursorJump(2 * col, row);
                 cout << "  ";
             }
+            cout.flush();
 
             Sleep(FLASH_DELAY);
         }
@@ -660,6 +679,7 @@ int MainMenu()
         color(8);
         CursorJump(18, 20);
         cout << "上下键选择，回车确认";
+        cout.flush();
 
         int key = ReadMenuKey();
 
@@ -708,6 +728,7 @@ Difficulty SelectDifficulty()
         color(8);
         CursorJump(17, 20);
         cout << "上下键选择，回车确认，Esc返回";
+        cout.flush();
 
         int key = ReadMenuKey();
 
@@ -756,6 +777,7 @@ void ShowLeaderboard()
     color(8);
     CursorJump(19, 22);
     cout << "按任意键返回主菜单";
+    cout.flush();
     getch();
 }
 
@@ -766,6 +788,7 @@ void PauseGame()
     cout << "  游戏暂停  ";
     CursorJump(2 * (COL / 3) - 2, ROW / 2 + 2);
     cout << "按任意键继续...";
+    cout.flush();
 
     while (!kbhit())
     {
@@ -809,8 +832,6 @@ void WriteGrade()
 
 void StartGame()
 {
-    game.reset(game.difficulty);
-
     while (true)
     {
         int shape = game.shape;
@@ -848,6 +869,7 @@ void StartGame()
 
                 DrawSpace(shape, form, x, shadowY);
                 DrawSpace(shape, form, x, y);
+                DrawBoard();
                 y++;
             }
             else if (kbhit())
@@ -858,18 +880,21 @@ void StartGame()
                 {
                     DrawSpace(shape, form, x, shadowY);
                     DrawSpace(shape, form, x, y);
+                    DrawBoard();
                     y++;
                 }
                 else if (key == LEFT && IsLegal(shape, form, x - 1, y))
                 {
                     DrawSpace(shape, form, x, shadowY);
                     DrawSpace(shape, form, x, y);
+                    DrawBoard();
                     x--;
                 }
                 else if (key == RIGHT && IsLegal(shape, form, x + 1, y))
                 {
                     DrawSpace(shape, form, x, shadowY);
                     DrawSpace(shape, form, x, y);
+                    DrawBoard();
                     x++;
                 }
                 else if (key == SPACE)
@@ -880,6 +905,7 @@ void StartGame()
                     {
                         DrawSpace(shape, form, x, shadowY);
                         DrawSpace(shape, form, x, y);
+                        DrawBoard();
                         form = nextForm;
                     }
                 }
@@ -901,6 +927,8 @@ void StartGame()
                     break;
                 }
             }
+
+            Sleep(1);
         }
 
         if (restarted)
@@ -923,6 +951,7 @@ void StartGame()
             cout << "本局得分：" << game.score.current();
             CursorJump(17, 16);
             cout << "按任意键返回主菜单";
+            cout.flush();
             getch();
             return;
         }
